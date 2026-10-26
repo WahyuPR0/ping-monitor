@@ -1,0 +1,3091 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Ping & SLA Telemetry Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
+  <script>
+    (function() {
+      try {
+        var theme = localStorage.getItem('ping_theme') || localStorage.getItem('wtl_theme');
+        if (theme === 'light') {
+          document.documentElement.classList.add('light-mode');
+        } else {
+          document.documentElement.classList.remove('light-mode');
+        }
+      } catch (_) {}
+    })();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { max-width: 100vw; overflow-x: hidden; scroll-behavior: smooth; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0f19;
+      --bg-subtle: #0f172a;
+      --card: rgba(20, 27, 45, 0.75);
+      --card-solid: #141b2d;
+      --card-hover: rgba(30, 41, 69, 0.85);
+      --text: #f1f5f9;
+      --text-bold: #ffffff;
+      --text-muted: #94a3b8;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-subtle: rgba(255, 255, 255, 0.05);
+      --border-hover: rgba(56, 189, 248, 0.4);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+      --glass-inner-border: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --success: #10b981;
+      --danger: #f43f5e;
+      --warning: #f59e0b;
+      --input-bg: rgba(9, 13, 22, 0.65);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.18);
+      --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.28);
+      --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      --grid-line: rgba(255, 255, 255, 0.05);
+    }
+
+    html.light-mode, body.light-mode {
+      --bg: #f1f5f9;
+      --bg-subtle: #e2e8f0;
+      --card: #ffffff;
+      --card-solid: #ffffff;
+      --card-hover: #f8fafc;
+      --text: #0f172a;
+      --text-bold: #020617;
+      --text-muted: #64748b;
+      --border: rgba(15, 23, 42, 0.09);
+      --border-subtle: rgba(15, 23, 42, 0.05);
+      --border-hover: rgba(2, 132, 199, 0.45);
+      --glass-inner-border: inset 0 1px 0 0 rgba(255, 255, 255, 0.85);
+      --accent: #0284c7;
+      --accent-glow: rgba(2, 132, 199, 0.18);
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --input-bg: #f8fafc;
+      --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+      --shadow-md: 0 4px 20px -2px rgba(15, 23, 42, 0.08);
+      --glass-shadow: 0 8px 30px -4px rgba(15, 23, 42, 0.06);
+      --grid-line: rgba(15, 23, 42, 0.06);
+    }
+
+    body {
+      font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(circle at 12% 20%, rgba(56, 189, 248, 0.05), transparent 32%),
+        radial-gradient(circle at 88% 15%, rgba(16, 185, 129, 0.04), transparent 30%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 28px 56px 28px;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.25); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.45); }
+
+    /* Header Bar matching server-health.ejs */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 26px;
+      margin-bottom: 18px;
+      background: var(--card);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--glass-inner-border), var(--glass-shadow);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 260px;
+      flex: 1;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      box-shadow: var(--glass-inner-border);
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .brand-icon img {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+    }
+
+    .header-title-area h1 {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text-bold);
+      margin: 0;
+      letter-spacing: -0.4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .header-title-area p {
+      color: var(--text-muted);
+      margin: 4px 0 0 0;
+      font-size: 13px;
+    }
+
+    .badge-noc {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 0.4px;
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+      animation: pulseDot 1.8s infinite;
+    }
+
+    @keyframes pulseDot {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .theme-toggle-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+      box-shadow: var(--glass-inner-border);
+    }
+
+    .theme-toggle-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .btn-ctrl {
+      padding: 7px 13px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card-solid);
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: var(--transition);
+      font-family: 'Outfit', sans-serif;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .btn-ctrl:hover {
+      background: var(--card-hover);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn-ctrl:active {
+      transform: scale(0.98);
+    }
+
+    .btn-ctrl.btn-danger-soft:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: rgba(239, 68, 68, 0.5);
+      color: #ef4444;
+    }
+
+    /* Unified In-Chart Toolbar Strip (Integrated inside Traffic Chart) */
+    .chart-toolbar-strip {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .chart-toolbar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chart-toolbar-subrow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: var(--input-bg);
+      padding: 7px 12px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .toolbar-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-right: 2px;
+    }
+
+    /* MikroTik Router Ping Toggle */
+    .toggle-router-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .toggle-btn:hover {
+      border-color: var(--border-medium);
+      color: var(--text-main);
+    }
+    .toggle-btn.active {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #10b981;
+    }
+    .toggle-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+    .toggle-btn.active .toggle-indicator {
+      background: #10b981;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+    }
+    .toggle-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .toggle-btn.invalid {
+      background: rgba(244, 63, 94, 0.15) !important;
+      border-color: rgba(244, 63, 94, 0.45) !important;
+      color: #f43f5e !important;
+    }
+    .toggle-btn.invalid .toggle-indicator {
+      background: #f43f5e !important;
+      box-shadow: 0 0 8px rgba(244, 63, 94, 0.8) !important;
+    }
+    .toggle-btn.verifying {
+      background: rgba(245, 158, 11, 0.15) !important;
+      border-color: rgba(245, 158, 11, 0.45) !important;
+      color: #f59e0b !important;
+    }
+    .toggle-btn.verifying .toggle-indicator {
+      background: #f59e0b !important;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.7) !important;
+      animation: pulseDot 0.8s infinite;
+    }
+
+    .tab-btn {
+      padding: 6px 13px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: var(--transition);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: var(--card-hover);
+      border-color: var(--accent);
+    }
+
+    .tab-btn.active {
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    html.light-mode .tab-btn.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    .tab-btn .chip-tag {
+      font-size: 9.5px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.16);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+    }
+
+    html.light-mode .tab-btn.active .chip-tag {
+      background: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .chip-close {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      font-size: 12px;
+      line-height: 1;
+      opacity: 0.75;
+      transition: opacity 0.15s;
+    }
+
+    .chip-close:hover {
+      opacity: 1;
+      background: rgba(244, 63, 94, 0.25);
+      color: var(--danger);
+    }
+
+    /* Custom Ephemeral Domain Input Form */
+    .custom-ping-form {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+    }
+
+    .input-domain {
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 6px 11px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      width: 230px;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .input-domain:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
+    .input-domain::placeholder {
+      color: var(--text-muted);
+      font-family: 'Outfit', sans-serif;
+      opacity: 0.75;
+    }
+
+    .btn-probe {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.14);
+      color: var(--accent);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: var(--transition);
+      font-family: 'Outfit', sans-serif;
+      white-space: nowrap;
+    }
+
+    .btn-probe:hover {
+      background: var(--accent);
+      color: #0b0f19;
+    }
+
+    html.light-mode .btn-probe:hover {
+      color: #ffffff;
+    }
+
+    .select-ctrl {
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--text);
+      cursor: pointer;
+      outline: none;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .select-ctrl:focus {
+      border-color: var(--accent);
+    }
+
+    /* Info Notice Bar (For Ephemeral Custom Target or Genuine Recording Start Notice) */
+    .notice-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px;
+      margin-bottom: 18px;
+      border-radius: 10px;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      font-size: 12.5px;
+      color: var(--text);
+      flex-wrap: wrap;
+    }
+
+    .notice-bar.ephemeral {
+      background: rgba(245, 158, 11, 0.09);
+      border-color: rgba(245, 158, 11, 0.28);
+    }
+
+    .notice-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .notice-mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11.5px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .notice-bar.ephemeral .notice-mono {
+      color: var(--warning);
+    }
+
+    /* Telemetry Cards Grid matching server-health.ejs */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+      transition: all 0.25s ease;
+    }
+
+    .stats-grid.single-source {
+      grid-template-columns: repeat(4, 1fr);
+    }
+
+    .stat-card {
+      background: var(--card);
+      padding: 16px 18px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--glass-inner-border), var(--shadow-sm);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--border-hover);
+      box-shadow: var(--glass-inner-border), var(--shadow-md);
+    }
+
+    .stat-card .label {
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .stat-card .value {
+      color: var(--text-bold);
+      font-size: 26px;
+      font-weight: 800;
+      margin-top: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+      letter-spacing: -0.5px;
+    }
+
+    .stat-card .unit {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .stat-card .subtext {
+      color: var(--text-muted);
+      font-size: 11.5px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .badge-status {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase;
+    }
+
+    .status-ok { background: rgba(16, 185, 129, 0.14); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.28); }
+    .status-warn { background: rgba(245, 158, 11, 0.14); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.28); }
+    .status-err { background: rgba(244, 63, 94, 0.14); color: var(--danger); border: 1px solid rgba(244, 63, 94, 0.28); }
+
+    /* Main Chart Card */
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 20px 22px;
+      margin-bottom: 18px;
+      box-shadow: var(--glass-inner-border), var(--shadow-sm);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chart-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-bold);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-legend {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text);
+    }
+
+    .legend-line {
+      width: 14px;
+      height: 3px;
+      border-radius: 3px;
+      display: inline-block;
+    }
+
+    .chart-canvas-wrap {
+      position: relative;
+      height: 290px;
+      width: 100%;
+    }
+
+    /* Unified Chart Header & Target Report Tag */
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .chart-title-area {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .chart-target-heading {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .target-flag {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .target-title-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-bold);
+      letter-spacing: -0.3px;
+    }
+
+    .target-title-ip {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .chart-meta-details {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      flex-wrap: wrap;
+    }
+
+    .meta-sep {
+      color: var(--border-hover);
+    }
+
+    .chart-controls-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .zoom-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--input-bg);
+      padding: 3px 6px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .zoom-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-right: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .zoom-pills-container {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .zoom-pill {
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      transition: var(--transition);
+      user-select: none;
+      line-height: 1.2;
+    }
+
+    .zoom-pill:hover {
+      color: var(--text-main);
+      background: var(--card-hover);
+      border-color: var(--border-subtle);
+    }
+
+    .zoom-pill.active {
+      background: rgba(56, 189, 248, 0.18);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 800;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.2);
+    }
+
+    html.light-mode .zoom-pill.active {
+      background: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    .range-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+    }
+
+    .footer-wm-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      font-size: 11.5px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent);
+      text-decoration: none;
+      transition: var(--transition);
+      user-select: none;
+    }
+
+    .footer-wm-badge:hover {
+      background: rgba(56, 189, 248, 0.14);
+      border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+
+    /* Mode Laporan: sembunyikan kontrol interaktif agar screenshot bersih */
+    body.report-mode .chart-toolbar-strip,
+    body.report-mode .toolbar-panel,
+    body.report-mode .notice-bar,
+    body.report-mode .chart-zoom-group,
+    body.report-mode .theme-toggle-btn,
+    body.report-mode .btn-ctrl:not(#btnReportMode),
+    body.report-mode .live-badge { display: none !important; }
+    body.report-mode #btnReportMode { background: var(--accent); color: #0b1220; }
+
+    /* Bottom Details Grid: Outage Incidents & Sample Table */
+    .details-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      gap: 18px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .data-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      box-shadow: var(--glass-inner-border), var(--shadow-sm);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      max-width: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
+    .data-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      flex-wrap: wrap;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .data-header h3 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-bold);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chart-zoom-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .btn-zoom {
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 5px;
+      border: 1px solid var(--border);
+      background: var(--card-solid);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      transition: var(--transition);
+    }
+
+    .btn-zoom:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .btn-zoom.active {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .scroll-box {
+      max-height: 290px;
+      overflow-y: auto;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--input-bg);
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    table {
+      width: 100%;
+      min-width: 480px;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--card-solid);
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      z-index: 2;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--card-hover); }
+
+    .incident-item {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .incident-item:last-child { border-bottom: none; }
+
+    .empty-state {
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .footer {
+      margin-top: 28px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Toast Notification System */
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 440px;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.4);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: toastIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.2s ease;
+    }
+    @keyframes toastIn {
+      from { transform: translateX(60px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .toast-danger {
+      background: rgba(35, 12, 18, 0.96);
+      border: 1px solid rgba(244, 63, 94, 0.6);
+      color: #fecdd3;
+    }
+    .toast-success {
+      background: rgba(12, 35, 22, 0.96);
+      border: 1px solid rgba(16, 185, 129, 0.6);
+      color: #a7f3d0;
+    }
+    .toast-info {
+      background: rgba(12, 28, 45, 0.96);
+      border: 1px solid rgba(56, 189, 248, 0.6);
+      color: #bae6fd;
+    }
+
+    @media (max-width: 1100px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .stats-grid.single-source { grid-template-columns: repeat(2, 1fr); }
+      .details-grid { grid-template-columns: minmax(0, 1fr); width: 100%; }
+    }
+
+    @media (max-width: 768px) {
+      body { padding: 12px 10px 48px 10px; }
+      .header { padding: 14px 12px; }
+      .header-title-area h1 { font-size: 17px; }
+      .toolbar-panel { padding: 12px 12px; }
+      .chart-card { padding: 14px 12px; }
+      .data-card { padding: 14px 12px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .chart-controls-wrap { align-items: flex-start; width: 100%; }
+      .input-domain { width: 140px; font-size: 13px; }
+      .chart-canvas-wrap { height: 230px; }
+      .details-grid { grid-template-columns: minmax(0, 1fr); width: 100%; }
+    }
+
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+      .stat-card { padding: 10px 12px; }
+      .stat-card .label { font-size: 10px; }
+      .stat-card .value { font-size: 20px; margin-top: 4px; }
+      .stat-card .subtext { font-size: 10px; margin-top: 6px; padding-top: 6px; }
+      .stat-card:last-child { grid-column: span 2; }
+      .target-title-name { font-size: 16px; }
+      .target-title-ip { font-size: 11px; }
+      .custom-ping-form { width: 100%; }
+      .input-domain { flex: 1; }
+      .header-actions { width: 100%; justify-content: space-between; }
+      .chart-zoom-group { width: 100%; margin-top: 2px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Top Header -->
+    <header class="header">
+      <div class="header-left">
+        <div class="brand-icon">
+          <img src="/favicon.ico" alt="Ping Monitor" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+          <svg style="display:none;" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+          </svg>
+        </div>
+        <div class="header-title-area">
+          <h1>
+            Network Ping &amp; SLA Telemetry
+            <span class="badge-noc">Dual-Source Probe</span>
+          </h1>
+          <p>Pemantauan latensi real-time dan histori SLA valid dari Host (LAN) &amp; MikroTik RouterOS (Uplink WAN).</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="theme-toggle-btn" onclick="toggleTheme()" title="Ganti Mode Terang/Gelap" aria-label="Ganti Tema">
+          <svg id="themeIconSun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="themeIconMoon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+
+        <div class="live-badge">
+          <span class="live-dot" id="liveDot"></span>
+          <span id="liveStatusText">LIVE SYNC (1S)</span>
+        </div>
+
+        <button type="button" class="btn-ctrl" id="btnReportMode" onclick="toggleReportMode()" title="Sembunyikan kontrol agar hasil screenshot bersih untuk laporan">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+            <circle cx="12" cy="13" r="4"></circle>
+          </svg>
+          <span id="btnReportModeText">Mode Laporan</span>
+        </button>
+
+        <button type="button" class="btn-ctrl" onclick="exportDataCsv()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Ekspor CSV</span>
+        </button>
+
+        <button type="button" class="btn-ctrl btn-danger-soft" id="btnResetHistory" onclick="confirmResetHistory()" title="Reset dan kosongkan seluruh histori ping &amp; statistik lokal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+          <span>Reset Data</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Telemetry Authenticity / Ephemeral Status Banner -->
+    <div class="notice-bar" id="telemetryNoticeBar">
+      <div class="notice-left">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--accent); flex-shrink:0;">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <span id="noticeText">Memuat status perekaman telemetri...</span>
+      </div>
+      <span class="notice-mono" id="noticeMeta">Target: 1.1.1.1</span>
+    </div>
+
+    <!-- 5 Key Telemetry Cards -->
+    <div class="stats-grid single-source">
+      <!-- 1. Latensi Saat Ini -->
+      <div class="stat-card">
+        <div class="label">
+          <span>Latensi Real-Time</span>
+          <span class="badge-status status-ok" id="qualityBadge">Optimal</span>
+        </div>
+        <div class="value">
+          <span id="currentPingNum">--</span>
+          <span class="unit">ms</span>
+        </div>
+        <div class="subtext">
+          <span id="ttlNum">TTL: --</span>
+          <span id="lastUpdatedLabel">--:--:--</span>
+        </div>
+      </div>
+
+      <!-- 2. Perbandingan Sumber (Host vs MikroTik) -->
+      <div class="stat-card" id="dualCompareCard" style="display: none;">
+        <div class="label">
+          <span>Host vs MikroTik</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+            <polyline points="16 3 21 3 21 8"></polyline>
+            <line x1="4" y1="20" x2="21" y2="3"></line>
+            <polyline points="21 16 21 21 16 21"></polyline>
+            <line x1="15" y1="15" x2="21" y2="21"></line>
+            <line x1="4" y1="4" x2="9" y2="9"></line>
+          </svg>
+        </div>
+        <div class="value" style="font-size: 20px;">
+          <span id="dualCompareVal" style="color: var(--accent);">-- / --</span>
+          <span class="unit">ms</span>
+        </div>
+        <div class="subtext">
+          <span>Overhead LAN:</span>
+          <span id="lanDeltaLabel" style="color: var(--text);">-- ms</span>
+        </div>
+      </div>
+
+      <!-- 3. SLA & Packet Loss -->
+      <div class="stat-card">
+        <div class="label">
+          <span>SLA Ketersediaan</span>
+        </div>
+        <div class="value">
+          <span id="slaUptimeNum" style="color: var(--success);">100%</span>
+        </div>
+        <div class="subtext">
+          <span id="slaLossDetail">Loss: 0%</span>
+          <span id="totalSamplesLabel">0 sampel</span>
+        </div>
+      </div>
+
+      <!-- 4. Rata-rata, Min & Jitter -->
+      <div class="stat-card">
+        <div class="label">
+          <span>Rata-Rata &amp; Jitter</span>
+        </div>
+        <div class="value">
+          <span id="avgPingNum">--</span>
+          <span class="unit">ms</span>
+        </div>
+        <div class="subtext">
+          <span id="minPingLabel">Min: -- ms</span>
+          <span id="jitterLabel">Jitter: -- ms</span>
+        </div>
+      </div>
+
+      <!-- 5. Persentil p95 & Puncak Max -->
+      <div class="stat-card">
+        <div class="label">
+          <span>Persentil p95 / Max</span>
+        </div>
+        <div class="value">
+          <span id="p95Num">--</span>
+          <span class="unit">ms</span>
+        </div>
+        <div class="subtext">
+          <span id="p50Label">p50: -- ms</span>
+          <span id="maxPingLabel">Max: -- ms</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Chart Card (Trafik & Kontrol Terpadu) -->
+    <div class="chart-card">
+      <!-- In-Chart Unified Toolbar Strip -->
+      <div class="chart-toolbar-strip">
+        <div class="chart-toolbar-row">
+          <!-- Permanent & Ephemeral Target Tabs -->
+          <div class="toolbar-group" id="targetTabsGroup">
+            <span class="toolbar-label">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              Target:
+            </span>
+            <div id="permanentTabsContainer" style="display:inline-flex; gap:6px; flex-wrap:wrap;">
+              <button type="button" id="targetBtn_1.1.1.1" class="tab-btn active" onclick="switchTarget('1.1.1.1')">
+                1.1.1.1 (Cloudflare)
+              </button>
+              <button type="button" id="targetBtn_8.8.8.8" class="tab-btn" onclick="switchTarget('8.8.8.8')">
+                8.8.8.8 (Google)
+              </button>
+              <button type="button" id="targetBtn_c.whatsapp.net" class="tab-btn" onclick="switchTarget('c.whatsapp.net')">
+                WhatsApp Chat
+              </button>
+              <button type="button" id="targetBtn_mmg.whatsapp.net" class="tab-btn" onclick="switchTarget('mmg.whatsapp.net')">
+                WhatsApp Media CDN
+              </button>
+              <button type="button" id="targetBtn_youtube.com" class="tab-btn" onclick="switchTarget('youtube.com')">
+                YouTube
+              </button>
+            </div>
+            <div id="ephemeralTabsContainer" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
+          </div>
+
+          <!-- Custom Domain / IP Ping Input -->
+          <form class="custom-ping-form" onsubmit="handleAddCustomTarget(event)">
+            <input
+              type="text"
+              id="customDomainInput"
+              class="input-domain"
+              placeholder="Domain / IP kustom..."
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <button type="submit" class="btn-probe" id="btnAddCustom" title="Uji ping domain/IP pilihan Anda">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>+ Custom Ping</span>
+            </button>
+          </form>
+        </div>
+
+        <div class="chart-toolbar-subrow">
+          <!-- Source Filter -->
+          <div class="toolbar-group" id="sourceSelectGroup" style="display: none;">
+            <span class="toolbar-label">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              </svg>
+              Sumber:
+            </span>
+            <select id="sourceSelect" class="select-ctrl" onchange="onSourceChange()">
+              <option value="both">Bandingkan (Host &amp; MikroTik)</option>
+              <option value="host">Host (LAN)</option>
+              <option value="router">MikroTik RouterOS (Uplink WAN)</option>
+            </select>
+          </div>
+
+          <!-- MikroTik Router Ping Toggle Switch -->
+          <div class="toolbar-group toggle-router-wrap">
+            <span class="toolbar-label" title="Aktifkan atau nonaktifkan ping dari router MikroTik">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              Ping MikroTik:
+            </span>
+            <button type="button" id="routerToggleBtn" class="toggle-btn" onclick="toggleRouterPing()" title="Klik untuk mengaktifkan / menonaktifkan ping dari router MikroTik">
+              <span class="toggle-indicator"></span>
+              <span id="routerToggleText">OFF</span>
+            </button>
+          </div>
+
+          <!-- Resolusi & Rentang Waktu Terpadu (Satu Tempat) -->
+          <div class="toolbar-group" id="unifiedResolutionGroup">
+            <span class="toolbar-label" title="Pilih resolusi dan rentang waktu pemantauan telemetri">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              Resolusi:
+            </span>
+            <div style="display:inline-flex; gap:5px; flex-wrap:wrap;">
+              <button type="button" class="tab-btn range-btn active" id="resBtn_30s" onclick="selectResolution('30s')" title="Live: 30 Detik terakhir (1s update)">30s</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_1m" onclick="selectResolution('1m')" title="Live: 1 Menit terakhir (1s update)">1m</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_5m" onclick="selectResolution('5m')" title="Live: 5 Menit terakhir (1s update)">5m</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_30m" onclick="selectResolution('30m')" title="Live: 30 Menit terakhir (1s update)">30m</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_1h" onclick="selectResolution('1h')" title="Live: 1 Jam penuh (1s update)">1 Jam</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_12h" onclick="selectResolution('12h')" title="Histori: 12 Jam terakhir (Agregat 5m)">12 Jam</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_24h" onclick="selectResolution('24h')" title="Histori: 24 Jam terakhir (Agregat 5m)">24 Jam</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_7d" onclick="selectResolution('7d')" title="Histori: 7 Hari terakhir (Agregat 1h)">7 Hari</button>
+              <button type="button" class="tab-btn range-btn" id="resBtn_30d" onclick="selectResolution('30d')" title="Histori: 30 Hari terakhir (Agregat 1h)">30 Hari</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-header">
+        <div class="chart-title-area">
+          <div class="chart-target-heading">
+            <span class="target-flag">TARGET:</span>
+            <span class="target-title-name" id="chartTargetDomain">1.1.1.1</span>
+            <span class="target-title-ip" id="chartTargetIp">(IP: 1.1.1.1 &bull; Cloudflare DNS)</span>
+          </div>
+          <div class="chart-meta-details">
+            <span id="chartTitleText">Live (Resolusi 30 Detik)</span>
+            <span class="meta-sep">&bull;</span>
+            <span id="chartCaptureTime">Capture: --:--:-- WIB</span>
+          </div>
+        </div>
+
+        <div class="chart-controls-wrap">
+          <!-- Legend -->
+          <div class="chart-legend">
+            <div class="legend-item" id="legendHost">
+              <span class="legend-line" style="background: #38bdf8;"></span>
+              <span>Host</span>
+            </div>
+            <div class="legend-item" id="legendRouter" style="display: none;">
+              <span class="legend-line" style="background: #10b981;"></span>
+              <span>MikroTik</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-canvas-wrap">
+        <canvas id="pingChart" style="touch-action: pan-y;"></canvas>
+      </div>
+    </div>
+
+    <!-- Multi-Window Traffic Summary Table (30 Detik, 5 Menit, 30 Menit, 60 Menit, 24 Jam) -->
+    <div class="data-card" style="margin-bottom: 18px;">
+      <div class="data-header">
+        <h3>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="3" y1="9" x2="21" y2="9"></line>
+            <line x1="3" y1="15" x2="21" y2="15"></line>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+          </svg>
+          <span>Tabel Ringkasan Trafik Multi-Periode</span>
+        </h3>
+        <span class="badge-status status-ok" id="windowSlaBadge">SLA 100%</span>
+      </div>
+
+      <div class="scroll-box" style="max-height: none;">
+        <table>
+          <thead>
+            <tr>
+              <th>Periode Jendela</th>
+              <th style="text-align: right;">Host (LAN)</th>
+              <th style="text-align: right;" id="thWindowRouter" style="display: none;">MikroTik (WAN)</th>
+              <th style="text-align: right;">Rentang (Min - Max)</th>
+              <th style="text-align: right;">Jitter</th>
+              <th style="text-align: right;">Sampel</th>
+              <th style="text-align: right;">Loss</th>
+              <th style="text-align: right;">SLA Uptime</th>
+              <th style="text-align: center;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="windowTableBody">
+            <tr>
+              <td colspan="8" class="empty-state">Menghitung statistik jendela multi-periode...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Bottom Grid: Outage Incidents & Sample Records -->
+    <div class="details-grid">
+      <!-- Outage Incidents Log -->
+      <div class="data-card">
+        <div class="data-header">
+          <h3>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>Log Insiden Gangguan (RTO)</span>
+          </h3>
+          <span class="badge-status status-ok" id="incidentCountBadge">0 Insiden</span>
+        </div>
+
+        <div class="scroll-box" id="incidentsContainer">
+          <div class="empty-state">Tidak ada insiden packet loss atau RTO tercatat.</div>
+        </div>
+      </div>
+
+      <!-- Time-Series Sample Table -->
+      <div class="data-card">
+        <div class="data-header">
+          <h3>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span id="tableTitleText">Tabel Titik Sampel Valid</span>
+          </h3>
+          <span style="font-size: 11.5px; font-family: 'JetBrains Mono', monospace; color: var(--accent);" id="sampleCountBadge">0 rekaman</span>
+        </div>
+
+        <div class="scroll-box">
+          <table>
+            <thead>
+              <tr>
+                <th>Waktu / Periode</th>
+                <th style="text-align: right;">Host (ms)</th>
+                <th style="text-align: right;" id="thSampleRouter" style="display: none;">MikroTik (ms)</th>
+                <th style="text-align: right;" id="thSampleDelta" style="display: none;">Selisih LAN</th>
+                <th style="text-align: right;">Sampel</th>
+                <th style="text-align: right;">Loss</th>
+              </tr>
+            </thead>
+            <tbody id="dataTableBody">
+              <tr>
+                <td colspan="4" class="empty-state">Memuat data telemetri...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer (Watermark GitHub WahyuPR0 di Paling Bawah) -->
+    <footer class="footer">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; width:100%;">
+        <div>Network Telemetry &amp; SLA Engine &bull; Dual-Source Ping Monitor</div>
+        <a href="https://github.com/WahyuPR0/ping-monitor" target="_blank" rel="noopener noreferrer" class="footer-wm-badge" title="Repository GitHub WahyuPR0 / ping-monitor">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+          </svg>
+          <span>WahyuPR0 / ping-monitor</span>
+        </a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // State Management
+    const PERMANENT_TARGETS = ["1.1.1.1", "8.8.8.8", "c.whatsapp.net", "mmg.whatsapp.net", "youtube.com"];
+    let currentTarget = "1.1.1.1";
+    let currentRange = "1h";
+    let currentLiveZoom = 30; // Default live zoom 30 detik for clean separated time view
+    let currentSource = "both";
+    let pollInterval = null;
+    let latestTelemetryData = null;
+
+    // Ephemeral session-only custom targets (stored ONLY in JS memory - disappears on page refresh!)
+    const ephemeralTargets = {};
+    let isProbingCustom = false;
+
+    // Theme Toggle
+    function syncThemeIcons() {
+      const isLight = document.documentElement.classList.contains("light-mode");
+      const sun = document.getElementById("themeIconSun");
+      const moon = document.getElementById("themeIconMoon");
+      if (sun && moon) {
+        sun.style.display = isLight ? "none" : "block";
+        moon.style.display = isLight ? "block" : "none";
+      }
+      if (pingChart) {
+        const gridColor = isLight ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+        const tickColor = isLight ? "#64748b" : "#94a3b8";
+        pingChart.options.scales.x.ticks.color = tickColor;
+        pingChart.options.scales.x.grid.color = gridColor;
+        if (pingChart.options.scales.x.border) pingChart.options.scales.x.border.color = gridColor;
+        pingChart.options.scales.y.ticks.color = tickColor;
+        pingChart.options.scales.y.grid.color = gridColor;
+        if (pingChart.options.scales.y.border) pingChart.options.scales.y.border.color = gridColor;
+        pingChart.update("none");
+      }
+    }
+
+    function toggleTheme() {
+      const isLight = document.documentElement.classList.toggle("light-mode");
+      document.body.classList.toggle("light-mode", isLight);
+      try {
+        localStorage.setItem("ping_theme", isLight ? "light" : "dark");
+      } catch (_) {}
+      syncThemeIcons();
+    }
+
+    // Initialize Chart.js
+    let pingChart = null;
+    function initChart() {
+      const canvas = document.getElementById("pingChart");
+      if (!canvas || typeof Chart === "undefined") return;
+
+      const ctx = canvas.getContext("2d");
+      const hostGrad = ctx.createLinearGradient(0, 0, 0, 280);
+      hostGrad.addColorStop(0, "rgba(56, 189, 248, 0.24)");
+      hostGrad.addColorStop(1, "rgba(56, 189, 248, 0.00)");
+
+      const routerGrad = ctx.createLinearGradient(0, 0, 0, 280);
+      routerGrad.addColorStop(0, "rgba(16, 185, 129, 0.20)");
+      routerGrad.addColorStop(1, "rgba(16, 185, 129, 0.00)");
+
+      const isLight = document.documentElement.classList.contains("light-mode");
+      const gridColor = isLight ? "rgba(15, 23, 42, 0.08)" : "rgba(255, 255, 255, 0.06)";
+      const tickColor = isLight ? "#64748b" : "#94a3b8";
+
+      pingChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Host (LAN)",
+              data: [],
+              borderColor: "#38bdf8",
+              backgroundColor: hostGrad,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              pointHitRadius: 8,
+              pointBackgroundColor: "#38bdf8",
+              fill: true,
+              tension: 0.05,
+              spanGaps: false
+            },
+            {
+              label: "MikroTik (Uplink WAN)",
+              data: [],
+              borderColor: "#10b981",
+              backgroundColor: routerGrad,
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHoverRadius: 5,
+              pointHitRadius: 8,
+              pointBackgroundColor: "#10b981",
+              fill: true,
+              tension: 0.05,
+              spanGaps: false
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          events: ["mousemove", "mouseout", "click"],
+          interaction: {
+            mode: "index",
+            intersect: false
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.94)",
+              titleColor: "#f8fafc",
+              bodyColor: "#e2e8f0",
+              borderColor: "rgba(56, 189, 248, 0.3)",
+              borderWidth: 1,
+              padding: 10,
+              titleFont: { family: "'JetBrains Mono', monospace", size: 12 },
+              bodyFont: { family: "'JetBrains Mono', monospace", size: 11.5 },
+              filter: function(tooltipItem) {
+                return true;
+              },
+              callbacks: {
+                label: function(context) {
+                  const val = context.parsed.y;
+                  if (val === null || val === undefined) {
+                    return `${context.dataset.label}: TERPUTUS (Server Offline / Jeda Kosong)`;
+                  }
+                  if (currentRange !== "1h" && latestTelemetryData) {
+                    const idx = context.dataIndex;
+                    const series = context.datasetIndex === 0 ? latestTelemetryData.hostSeries : latestTelemetryData.routerSeries;
+                    const pt = series && series[idx];
+                    if (pt && pt.samples > 1) {
+                      const minS = pt.minPing !== null ? pt.minPing : val;
+                      const maxS = pt.maxPing !== null ? pt.maxPing : val;
+                      const lossS = pt.lossPct || 0;
+                      return `${context.dataset.label}: ${val} ms (Min ${minS} / Max ${maxS} ms | ${pt.samples} sampel | Loss ${lossS}%)`;
+                    }
+                  }
+                  return `${context.dataset.label}: ${val} ms`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                display: true,
+                color: gridColor,
+                lineWidth: 1,
+                drawTicks: true
+              },
+              border: {
+                display: true,
+                color: gridColor
+              },
+              ticks: {
+                color: tickColor,
+                font: { family: "'JetBrains Mono', monospace", size: 10 },
+                maxRotation: 0,
+                minRotation: 0,
+                autoSkip: true,
+                autoSkipPadding: 24,
+                maxTicksLimit: 12
+              }
+            },
+            y: {
+              beginAtZero: true,
+              suggestedMax: 30,
+              grid: { color: gridColor },
+              border: {
+                display: true,
+                color: gridColor
+              },
+              ticks: {
+                color: tickColor,
+                font: { family: "'JetBrains Mono', monospace", size: 10.5 },
+                callback: function(v) { return v + " ms"; }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function getApiOrigin() {
+      if (window.location.origin && window.location.origin.startsWith("http")) {
+        return window.location.origin;
+      }
+      return "";
+    }
+
+    let isRouterPingEnabled = false;
+    let CONFIGURED_TARGETS = [
+      { host: "1.1.1.1", label: "1.1.1.1 (Cloudflare)" },
+      { host: "8.8.8.8", label: "8.8.8.8 (Google)" },
+      { host: "c.whatsapp.net", label: "WhatsApp Chat" },
+      { host: "mmg.whatsapp.net", label: "WhatsApp Media CDN" },
+      { host: "youtube.com", label: "YouTube" }
+    ];
+
+    function showToast(message, type = "info") {
+      let container = document.getElementById("toastContainer");
+      if (!container) {
+        container = document.createElement("div");
+        container.id = "toastContainer";
+        container.className = "toast-container";
+        document.body.appendChild(container);
+      }
+      const toast = document.createElement("div");
+      toast.className = `toast toast-${type}`;
+
+      let iconSvg = "";
+      if (type === "danger") {
+        iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+      } else if (type === "success") {
+        iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+      } else {
+        iconSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+      }
+
+      toast.innerHTML = `
+        ${iconSvg}
+        <div style="flex:1; line-height:1.4;">${message}</div>
+        <span style="cursor:pointer; opacity:0.75; padding-left:8px; display:inline-flex; align-items:center;" onclick="this.parentElement.remove()" title="Tutup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        try { toast.remove(); } catch {}
+      }, 6000);
+    }
+
+    async function syncRouterConfig() {
+      try {
+        const api = getApiOrigin();
+        const res = await fetch(`${api}/api/ping/config`, { cache: "no-store" });
+        if (res.ok) {
+          const cfg = await res.json();
+          if (Array.isArray(cfg.targets) && cfg.targets.length > 0) {
+            CONFIGURED_TARGETS = cfg.targets;
+            PERMANENT_TARGETS = cfg.targets.map(t => t.host);
+            renderTargetTabs();
+            if (!PERMANENT_TARGETS.includes(currentTarget)) {
+              switchTarget(PERMANENT_TARGETS[0]);
+            }
+          }
+          updateRouterToggleUI(Boolean(cfg.routerPingEnabled));
+        }
+      } catch (err) {
+        console.warn("Gagal membaca konfigurasi router ping:", err);
+      }
+    }
+
+    async function toggleRouterPing() {
+      const btn = document.getElementById("routerToggleBtn");
+      const text = document.getElementById("routerToggleText");
+      if (btn) {
+        btn.disabled = true;
+        btn.className = "toggle-btn verifying";
+      }
+      const targetState = !isRouterPingEnabled;
+      if (text) text.textContent = "VERIFIKASI...";
+
+      try {
+        const api = getApiOrigin();
+        const res = await fetch(`${api}/api/ping/toggle-router`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: targetState })
+        });
+        const data = await res.json();
+
+        if (data.success && data.routerPingEnabled) {
+          updateRouterToggleUI(true);
+          showToast(data.message || "Koneksi MikroTik terverifikasi dan aktif!", "success");
+          fetchTelemetry();
+        } else if (!targetState) {
+          updateRouterToggleUI(false);
+          showToast("Ping MikroTik dinonaktifkan.", "info");
+          fetchTelemetry();
+        } else {
+          // Gagal verifikasi .env / koneksi ditolak
+          updateRouterToggleUI(false, true, data.error);
+          showToast(`MikroTik Tidak Valid: ${data.error || 'Gagal koneksi'}`, "danger");
+        }
+      } catch (err) {
+        console.error("Gagal mengubah status router ping:", err);
+        updateRouterToggleUI(false, true, err.message);
+        showToast(`Terjadi kesalahan: ${err.message}`, "danger");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function updateRouterToggleUI(enabled, isInvalid = false, errorMsg = "") {
+      isRouterPingEnabled = enabled;
+      const btn = document.getElementById("routerToggleBtn");
+      const text = document.getElementById("routerToggleText");
+      const legendRouter = document.getElementById("legendRouter");
+      const sourceSelectGroup = document.getElementById("sourceSelectGroup");
+      const sourceSelect = document.getElementById("sourceSelect");
+      const dualCompareCard = document.getElementById("dualCompareCard");
+      const statsGrid = document.querySelector(".stats-grid");
+      const thWindowRouter = document.getElementById("thWindowRouter");
+      const thSampleRouter = document.getElementById("thSampleRouter");
+      const thSampleDelta = document.getElementById("thSampleDelta");
+
+      // 1. Sembunyikan kartu Host vs MikroTik jika mikrotik tidak aktif
+      if (dualCompareCard && statsGrid) {
+        if (enabled) {
+          dualCompareCard.style.display = "flex";
+          statsGrid.classList.remove("single-source");
+        } else {
+          dualCompareCard.style.display = "none";
+          statsGrid.classList.add("single-source");
+        }
+      }
+
+      // 2. Tampilkan/Sembunyikan dropdown Sumber
+      if (sourceSelectGroup) {
+        sourceSelectGroup.style.display = enabled ? "inline-flex" : "none";
+      }
+
+      // 3. Tampilkan/Sembunyikan Kolom MikroTik pada Tabel
+      if (thWindowRouter) thWindowRouter.style.display = enabled ? "" : "none";
+      if (thSampleRouter) thSampleRouter.style.display = enabled ? "" : "none";
+      if (thSampleDelta) thSampleDelta.style.display = enabled ? "" : "none";
+
+      // 4. Tampilan tombol toggle dengan verifikasi status
+      if (btn) {
+        if (enabled) {
+          btn.className = "toggle-btn active";
+          btn.innerHTML = `
+            <span class="toggle-indicator"></span>
+            <span id="routerToggleText">ON</span>
+          `;
+          btn.title = "Ping MikroTik aktif & terhubung. Klik untuk menonaktifkan.";
+        } else if (isInvalid) {
+          btn.className = "toggle-btn invalid";
+          btn.innerHTML = `
+            <span class="toggle-indicator"></span>
+            <span id="routerToggleText">OFF (TIDAK VALID)</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:3px;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          `;
+          btn.title = `Konfigurasi MikroTik di .env tidak valid: ${errorMsg || 'Gagal terhubung'}. Klik untuk mencoba verifikasi ulang.`;
+        } else {
+          btn.className = "toggle-btn";
+          btn.innerHTML = `
+            <span class="toggle-indicator"></span>
+            <span id="routerToggleText">OFF</span>
+          `;
+          btn.title = "Ping MikroTik nonaktif. Klik untuk mengaktifkan & memverifikasi koneksi .env.";
+        }
+      }
+
+      if (legendRouter) {
+        legendRouter.style.display = enabled ? "inline-flex" : "none";
+      }
+
+      if (sourceSelect) {
+        const routerOpt = sourceSelect.querySelector('option[value="router"]');
+        const bothOpt = sourceSelect.querySelector('option[value="both"]');
+        if (routerOpt) {
+          routerOpt.textContent = enabled ? "MikroTik RouterOS (Uplink WAN)" : "MikroTik (Nonaktif)";
+          routerOpt.disabled = !enabled;
+        }
+        if (bothOpt) {
+          bothOpt.textContent = enabled ? "Bandingkan (Host &amp; MikroTik)" : "Bandingkan (MikroTik Nonaktif)";
+          bothOpt.disabled = !enabled;
+        }
+        if (!enabled && (currentSource === "router" || currentSource === "both")) {
+          currentSource = "host";
+          sourceSelect.value = "host";
+        } else if (enabled && currentSource === "host") {
+          currentSource = "both";
+          sourceSelect.value = "both";
+        }
+      }
+
+      if (window.pingChart && pingChart.data && pingChart.data.datasets && pingChart.data.datasets[1]) {
+        pingChart.data.datasets[1].hidden = !enabled;
+        pingChart.update("none");
+      }
+    }
+
+    function isEphemeralTarget(host) {
+      return !PERMANENT_TARGETS.includes(host) && Boolean(ephemeralTargets[host]);
+    }
+
+    // Add Ephemeral Custom Domain/IP (Session-only, disappears on refresh)
+    async function handleAddCustomTarget(e) {
+      e.preventDefault();
+      const input = document.getElementById("customDomainInput");
+      if (!input) return;
+
+      let raw = input.value.trim().toLowerCase();
+      raw = raw.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim();
+      if (!raw) return;
+
+      if (PERMANENT_TARGETS.includes(raw)) {
+        input.value = "";
+        switchTarget(raw);
+        return;
+      }
+
+      const btn = document.getElementById("btnAddCustom");
+      if (btn) btn.disabled = true;
+
+      try {
+        // Test initial probe to validate domain/DNS resolution
+        const api = getApiOrigin();
+        const res = await fetch(`${api}/api/ping/probe?target=${encodeURIComponent(raw)}`, { cache: "no-store" });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          alert(data.error || `Gagal menghubungi domain/IP: ${raw}`);
+          return;
+        }
+
+        if (!ephemeralTargets[raw]) {
+          ephemeralTargets[raw] = {
+            host: raw,
+            resolvedIp: data.resolvedIp || raw,
+            startedAt: new Date().toISOString(),
+            hostSeries: [],
+            routerSeries: [],
+            incidents: [],
+            hostPings: [],
+            routerPings: [],
+            totalSent: 0,
+            hostLost: 0,
+            routerLost: 0,
+            lastHostPing: null,
+            lastRouterPing: null,
+            lastHostTtl: null,
+            lastRouterTtl: null
+          };
+        }
+
+        appendEphemeralSample(raw, data);
+        input.value = "";
+        renderTargetTabs();
+        switchTarget(raw);
+      } catch (err) {
+        alert("Gagal melakukan uji ping ke domain tersebut.");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function appendEphemeralSample(host, probeData) {
+      const store = ephemeralTargets[host];
+      if (!store) return;
+
+      store.resolvedIp = probeData.resolvedIp || store.resolvedIp;
+      store.totalSent++;
+
+      const hPing = probeData.host?.pingMs ?? null;
+      const hLoss = Boolean(probeData.host?.isLoss || hPing === null);
+      const rPing = probeData.router?.pingMs ?? null;
+      const rLoss = Boolean(probeData.router?.isLoss || rPing === null);
+
+      store.lastHostPing = hPing;
+      store.lastRouterPing = rPing;
+      store.lastHostTtl = probeData.host?.ttl || null;
+      store.lastRouterTtl = probeData.router?.ttl || null;
+
+      if (!hLoss && hPing !== null) {
+        store.hostPings.push(hPing);
+        if (store.hostPings.length > 600) store.hostPings.shift();
+      } else {
+        store.hostLost++;
+        store.incidents.unshift({
+          startTime: probeData.timestamp,
+          source: "host",
+          reason: `Host RTO (${host})`,
+          durationSeconds: 1
+        });
+      }
+
+      if (isRouterPingEnabled && probeData.router) {
+        if (!rLoss && rPing !== null) {
+          store.routerPings.push(rPing);
+          if (store.routerPings.length > 600) store.routerPings.shift();
+        } else {
+          store.routerLost++;
+          store.incidents.unshift({
+            startTime: probeData.timestamp,
+            source: "router",
+            reason: `MikroTik RTO (${host})`,
+            durationSeconds: 1
+          });
+        }
+      }
+
+      if (store.incidents.length > 20) store.incidents.length = 20;
+
+      store.hostSeries.push({
+        key: probeData.timestamp,
+        timestamp: probeData.timestamp,
+        label: probeData.label,
+        avgPing: hPing,
+        minPing: hPing,
+        maxPing: hPing,
+        lossPct: hLoss ? 100 : 0,
+        samples: 1,
+        sent: 1,
+        lost: hLoss ? 1 : 0,
+        unmonitored: false
+      });
+
+      if (isRouterPingEnabled && probeData.router) {
+        store.routerSeries.push({
+          key: probeData.timestamp,
+          timestamp: probeData.timestamp,
+          label: probeData.label,
+          avgPing: rPing,
+          minPing: rPing,
+          maxPing: rPing,
+          lossPct: rLoss ? 100 : 0,
+          samples: 1,
+          sent: 1,
+          lost: rLoss ? 1 : 0,
+          unmonitored: false
+        });
+      } else {
+        store.routerSeries.push({
+          key: probeData.timestamp,
+          timestamp: probeData.timestamp,
+          label: probeData.label,
+          avgPing: null,
+          minPing: null,
+          maxPing: null,
+          lossPct: 0,
+          samples: 0,
+          sent: 0,
+          lost: 0,
+          unmonitored: true
+        });
+      }
+
+      if (store.hostSeries.length > 120) store.hostSeries.shift();
+      if (store.routerSeries.length > 120) store.routerSeries.shift();
+    }
+
+    function buildEphemeralTelemetryObject(host) {
+      const store = ephemeralTargets[host];
+      if (!store) return null;
+
+      const isRouter = isRouterPingEnabled && currentSource === "router";
+      const pings = isRouter ? store.routerPings : store.hostPings;
+      const sorted = [...pings].sort((a, b) => a - b);
+      const minPing = sorted.length > 0 ? sorted[0] : null;
+      const maxPing = sorted.length > 0 ? sorted[sorted.length - 1] : null;
+      const sum = pings.reduce((acc, v) => acc + v, 0);
+      const avgPing = pings.length > 0 ? Math.round((sum / pings.length) * 10) / 10 : null;
+      const p50 = sorted.length > 0 ? sorted[Math.floor(sorted.length * 0.5)] : null;
+      const p95 = sorted.length > 0 ? sorted[Math.floor(sorted.length * 0.95)] : null;
+      const p99 = sorted.length > 0 ? sorted[Math.floor(sorted.length * 0.99)] : null;
+
+      const hostSum = store.hostPings.reduce((a, b) => a + b, 0);
+      const hostAvg = store.hostPings.length > 0 ? Math.round((hostSum / store.hostPings.length) * 10) / 10 : null;
+      const routerSum = store.routerPings.reduce((a, b) => a + b, 0);
+      const routerAvg = (isRouterPingEnabled && store.routerPings.length > 0) ? Math.round((routerSum / store.routerPings.length) * 10) / 10 : null;
+
+      let jitter = 0;
+      if (pings.length > 1) {
+        let diffSum = 0;
+        for (let i = 1; i < pings.length; i++) {
+          diffSum += Math.abs(pings[i] - pings[i - 1]);
+        }
+        jitter = Math.round((diffSum / (pings.length - 1)) * 10) / 10;
+      }
+
+      const sent = store.totalSent;
+      const lost = isRouter ? store.routerLost : store.hostLost;
+      const lossPct = sent > 0 ? Math.round((lost / sent) * 1000) / 10 : 0;
+      const slaUptime = sent > 0 ? Math.round(((sent - lost) / sent) * 10000) / 100 : 100;
+
+      const computeWindow = (points) => {
+        if (!points || points.length === 0) {
+          return { samples: 0, hostAvg: null, routerAvg: null, minPing: null, maxPing: null, jitter: 0, lossPct: 0, slaUptime: 100 };
+        }
+        let hSum = 0, hCnt = 0;
+        let rSum = 0, rCnt = 0;
+        let lost = 0;
+        let minP = null, maxP = null;
+        const pings = [];
+        for (const pt of points) {
+          if (pt.avgPing !== null && !pt.lost) {
+            hSum += pt.avgPing;
+            hCnt++;
+            pings.push(pt.avgPing);
+            minP = minP === null ? pt.avgPing : Math.min(minP, pt.avgPing);
+            maxP = maxP === null ? pt.avgPing : Math.max(maxP, pt.avgPing);
+          } else {
+            lost++;
+          }
+        }
+        let jit = 0;
+        if (pings.length > 1) {
+          let diffSum = 0;
+          for (let i = 1; i < pings.length; i++) diffSum += Math.abs(pings[i] - pings[i - 1]);
+          jit = Math.round((diffSum / (pings.length - 1)) * 10) / 10;
+        }
+        const total = points.length;
+        const lossP = total > 0 ? Math.round((lost / total) * 1000) / 10 : 0;
+        const uptime = total > 0 ? Math.round(((total - lost) / total) * 10000) / 100 : 100;
+        return {
+          samples: total,
+          hostAvg: hCnt > 0 ? Math.round((hSum / hCnt) * 10) / 10 : null,
+          routerAvg: (isRouterPingEnabled && hCnt > 0) ? Math.round((rSum / rCnt) * 10) / 10 : null,
+          minPing: minP,
+          maxPing: maxP,
+          jitter: jit,
+          lossPct: lossP,
+          slaUptime: uptime
+        };
+      };
+
+      const ephemWindows = {
+        s30: computeWindow(store.hostSeries.slice(-30)),
+        m5: computeWindow(store.hostSeries.slice(-300)),
+        m30: computeWindow(store.hostSeries.slice(-1800)),
+        m60: computeWindow(store.hostSeries.slice(-3600)),
+        h12: computeWindow(store.hostSeries),
+        h24: computeWindow(store.hostSeries),
+        d7: computeWindow(store.hostSeries),
+        d30: computeWindow(store.hostSeries),
+      };
+
+      const recentHost = store.hostSeries.slice(-currentLiveZoom);
+      const recentRouter = store.routerSeries.slice(-currentLiveZoom);
+      const missingCount = currentLiveZoom - recentHost.length;
+      const padHost = [];
+      const padRouter = [];
+      if (missingCount > 0) {
+        const firstTime = recentHost.length > 0 ? new Date(recentHost[0].timestamp).getTime() : Date.now();
+        for (let i = missingCount; i >= 1; i--) {
+          const slotDate = new Date(firstTime - i * 1000);
+          const ts = slotDate.toISOString();
+          const hr = String(slotDate.getHours()).padStart(2, "0");
+          const mn = String(slotDate.getMinutes()).padStart(2, "0");
+          const sc = String(slotDate.getSeconds()).padStart(2, "0");
+          const lbl = `${hr}:${mn}:${sc}`;
+          const blank = {
+            key: ts,
+            timestamp: ts,
+            label: lbl,
+            avgPing: null,
+            minPing: null,
+            maxPing: null,
+            lossPct: null,
+            samples: 0,
+            sent: 0,
+            lost: 0,
+            unmonitored: true
+          };
+          padHost.push(blank);
+          padRouter.push(blank);
+        }
+      }
+
+      return {
+        target: store.host,
+        resolvedIp: store.resolvedIp,
+        isEphemeral: true,
+        range: "1h",
+        source: currentSource,
+        startedAt: store.startedAt,
+        recordedSlotsCount: recentHost.length,
+        totalSlotsCount: currentLiveZoom,
+        summary: {
+          currentPing: isRouter ? store.lastRouterPing : store.lastHostPing,
+          hostCurrentPing: store.lastHostPing,
+          routerCurrentPing: isRouterPingEnabled ? store.lastRouterPing : null,
+          hostAvg,
+          routerAvg: isRouterPingEnabled ? routerAvg : null,
+          ttl: isRouter ? store.lastRouterTtl : store.lastHostTtl,
+          slaUptime,
+          lossPct,
+          totalSent: sent,
+          totalLost: lost,
+          minPing,
+          avgPing,
+          maxPing,
+          jitter,
+          p50,
+          p95,
+          p99,
+          lastUpdated: new Date().toISOString(),
+          windows: ephemWindows
+        },
+        hostSeries: [...padHost, ...recentHost],
+        routerSeries: [...padRouter, ...recentRouter],
+        incidents: (store.incidents || []).filter(inc => isRouterPingEnabled || inc.source !== "router")
+      };
+    }
+
+    function removeEphemeralTarget(host, ev) {
+      if (ev) ev.stopPropagation();
+      delete ephemeralTargets[host];
+      renderTargetTabs();
+      if (currentTarget === host) {
+        switchTarget(PERMANENT_TARGETS[0] || "1.1.1.1");
+      }
+    }
+
+    function renderTargetTabs() {
+      const permContainer = document.getElementById("permanentTabsContainer");
+      if (permContainer && Array.isArray(CONFIGURED_TARGETS) && CONFIGURED_TARGETS.length > 0) {
+        permContainer.innerHTML = CONFIGURED_TARGETS.map(t => {
+          const isActive = currentTarget === t.host;
+          return `
+            <button type="button" id="targetBtn_${t.host}" class="tab-btn ${isActive ? 'active' : ''}" onclick="switchTarget('${t.host}')" title="Target: ${t.label}">
+              ${t.label || t.host}
+            </button>
+          `;
+        }).join("");
+      } else {
+        PERMANENT_TARGETS.forEach(t => {
+          const btn = document.getElementById(`targetBtn_${t}`);
+          if (btn) {
+            btn.classList.toggle("active", currentTarget === t);
+          }
+        });
+      }
+
+      const container = document.getElementById("ephemeralTabsContainer");
+      if (!container) return;
+
+      const keys = Object.keys(ephemeralTargets);
+      container.innerHTML = keys.map(k => {
+        const isActive = currentTarget === k;
+        return `
+          <button type="button" class="tab-btn ${isActive ? 'active' : ''}" onclick="switchTarget('${k}')">
+            <span>${k}</span>
+            <span class="chip-tag">SESI</span>
+            <span class="chip-close" onclick="removeEphemeralTarget('${k}', event)" title="Hapus target sesi">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    async function fetchTelemetry() {
+      const api = getApiOrigin();
+
+      // If custom session target is active, probe on-demand
+      if (isEphemeralTarget(currentTarget)) {
+        if (isProbingCustom) return;
+        isProbingCustom = true;
+        try {
+          const res = await fetch(`${api}/api/ping/probe?target=${encodeURIComponent(currentTarget)}`, { cache: "no-store" });
+          if (res.ok) {
+            const probeData = await res.json();
+            appendEphemeralSample(currentTarget, probeData);
+            const telemetry = buildEphemeralTelemetryObject(currentTarget);
+            latestTelemetryData = telemetry;
+            renderDashboard(telemetry);
+          }
+        } catch (err) {
+          console.warn("Gagal melakukan probe sesi:", err);
+        } finally {
+          isProbingCustom = false;
+        }
+        return;
+      }
+
+      // Permanent 24/7 target with live zoom support
+      const zoomParam = (currentRange === "1h" && currentLiveZoom > 0) ? `&zoom=${currentLiveZoom}` : "";
+      const url = `${api}/api/ping/telemetry?target=${encodeURIComponent(currentTarget)}&range=${encodeURIComponent(currentRange)}&source=${encodeURIComponent(currentSource)}${zoomParam}`;
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        latestTelemetryData = data;
+        renderDashboard(data);
+        const dot = document.getElementById("liveDot");
+        const statusTxt = document.getElementById("liveStatusText");
+        if (dot) {
+          dot.style.background = "";
+          dot.style.boxShadow = "";
+        }
+        if (statusTxt) {
+          statusTxt.style.color = "";
+        }
+      } catch (err) {
+        console.warn("Gagal mengambil telemetri:", err);
+        const dot = document.getElementById("liveDot");
+        const statusTxt = document.getElementById("liveStatusText");
+        if (dot) {
+          dot.style.background = "#f43f5e";
+          dot.style.boxShadow = "0 0 8px rgba(244, 63, 94, 0.8)";
+        }
+        if (statusTxt) {
+          statusTxt.textContent = "SERVER TERPUTUS (OFF)";
+          statusTxt.style.color = "#f43f5e";
+        }
+
+        // Jika server mati saat browser terbuka, tambahkan titik kosong (terputus) di grafik real-time
+        if (pingChart && currentRange === "1h") {
+          const now = new Date();
+          const pad = n => String(n).padStart(2, "0");
+          const label = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+          pingChart.data.labels.push(label);
+          pingChart.data.datasets[0].data.push(null);
+          pingChart.data.datasets[1].data.push(null);
+          const maxPoints = currentLiveZoom > 0 ? currentLiveZoom : 300;
+          if (pingChart.data.labels.length > maxPoints) {
+            pingChart.data.labels.shift();
+            pingChart.data.datasets[0].data.shift();
+            pingChart.data.datasets[1].data.shift();
+          }
+          pingChart.update("none");
+        }
+      }
+    }
+
+    function formatIndoDateTime(isoStr) {
+      if (!isoStr) return "-";
+      try {
+        const d = new Date(isoStr);
+        const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+        const day = String(d.getDate()).padStart(2, "0");
+        const mon = months[d.getMonth()];
+        const yr = d.getFullYear();
+        const hr = String(d.getHours()).padStart(2, "0");
+        const min = String(d.getMinutes()).padStart(2, "0");
+        const sec = String(d.getSeconds()).padStart(2, "0");
+        return `${day} ${mon} ${yr} ${hr}:${min}:${sec} WIB`;
+      } catch (_) {
+        return isoStr;
+      }
+    }
+
+    function renderDashboard(data) {
+      if (!data || !data.summary) return;
+      const s = data.summary;
+
+      // Update Notice Banner (Transparency of Recording Start / Ephemeral Status)
+      const noticeBar = document.getElementById("telemetryNoticeBar");
+      const noticeText = document.getElementById("noticeText");
+      const noticeMeta = document.getElementById("noticeMeta");
+
+      if (data.isEphemeral) {
+        noticeBar.className = "notice-bar ephemeral";
+        noticeText.innerHTML = `<strong>Mode Ping Sesi Sementara:</strong> Target <code>${data.target}</code> (${data.resolvedIp}) diuji langsung secara real-time dan <strong>otomatis hilang saat halaman di-refresh</strong>.`;
+        noticeMeta.textContent = `Sampel Sesi: ${s.totalSent}x ping`;
+      } else {
+        noticeBar.className = "notice-bar";
+        const startStr = formatIndoDateTime(data.startedAt);
+        const totalRealSamples = Number(s.totalSent || 0).toLocaleString("id-ID");
+        const latestOffline = (data.incidents || []).find(i => String(i.reason || "").includes("Daemon Offline") || String(i.reason || "").includes("Server Dimatikan"));
+        if (latestOffline && currentRange === "1h") {
+          const offTime = latestOffline.startTime ? new Date(latestOffline.startTime).toLocaleTimeString("id-ID") : "";
+          noticeText.innerHTML = `<strong>Status Pemantauan:</strong> Terdeteksi server sempat offline selama <strong>${latestOffline.durationSeconds} detik</strong> (pukul ${offTime}). Garis grafik <strong>terputus (celah kosong)</strong> selama server mati.`;
+          noticeMeta.textContent = `${totalRealSamples} sampel nyata`;
+        } else if (currentRange === "1h") {
+          const rec = data.recordedSlotsCount || 0;
+          const tot = data.totalSlotsCount || 1;
+          const pct = Math.round((rec / tot) * 100);
+          if (pct < 100) {
+            noticeText.innerHTML = `<strong>Daemon Telemetri Aktif:</strong> Terkumpul <strong>${rec} dari ${tot} detik</strong> (${pct}%) pada skala jendela aktif. Bagian sebelum rekaman dimulai dikosongkan.`;
+          } else {
+            noticeText.innerHTML = `<strong>Daemon Telemetri Aktif:</strong> Perekaman murni berjalan sejak <strong>${startStr}</strong> (Proteksi Audit ISP aktif: Reboot lokal otomatis diabaikan dari loss ISP).`;
+          }
+          noticeMeta.textContent = `${totalRealSamples} sampel nyata`;
+        } else if (currentRange === "12h" || currentRange === "24h") {
+          const rec = data.recordedSlotsCount || 0;
+          const tot = data.totalSlotsCount || 1;
+          const pct = Math.round((rec / tot) * 100);
+          if (pct < 100) {
+            noticeText.innerHTML = `<strong>Histori Valid (${currentRange.toUpperCase()}):</strong> Terkumpul <strong>${rec} dari ${tot} Slot</strong> (${pct}%) resolusi detail 5 menit (akumulasi <strong>${totalRealSamples} sampel ping asli</strong> sejak <strong>${startStr}</strong>).`;
+          } else {
+            noticeText.innerHTML = `<strong>Histori Valid (${currentRange.toUpperCase()}):</strong> Terdata penuh <strong>${rec}/${tot} Slot (100%)</strong> resolusi detail 5 menit (akumulasi <strong>${totalRealSamples} sampel ping asli</strong> sejak <strong>${startStr}</strong>).`;
+          }
+          noticeMeta.textContent = `${rec}/${tot} Slot 5-Menit Terdata`;
+        } else {
+          const rec = data.recordedSlotsCount || 0;
+          const tot = data.totalSlotsCount || 1;
+          const pct = Math.round((rec / tot) * 100);
+          if (pct < 100) {
+            noticeText.innerHTML = `<strong>Histori Valid (${currentRange.toUpperCase()}):</strong> Terkumpul <strong>${rec} dari ${tot} Jam</strong> (${pct}%) resolusi per jam (akumulasi <strong>${totalRealSamples} sampel ping asli</strong> sejak <strong>${startStr}</strong>).`;
+          } else {
+            noticeText.innerHTML = `<strong>Histori Valid (${currentRange.toUpperCase()}):</strong> Terdata penuh <strong>${rec}/${tot} Jam (100%)</strong> resolusi per jam (akumulasi <strong>${totalRealSamples} sampel ping asli</strong> sejak <strong>${startStr}</strong>).`;
+          }
+          noticeMeta.textContent = `${rec}/${tot} Slot Jam Terdata`;
+        }
+      }
+
+      // Card 1: Current Ping
+      const curEl = document.getElementById("currentPingNum");
+      const badge = document.getElementById("qualityBadge");
+      const ttlEl = document.getElementById("ttlNum");
+      const updateEl = document.getElementById("lastUpdatedLabel");
+
+      updateEl.textContent = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+      if (s.currentPing !== null && s.currentPing !== undefined) {
+        curEl.textContent = s.currentPing < 1 ? "<1" : s.currentPing;
+        ttlEl.textContent = s.ttl ? `TTL: ${s.ttl}` : "TTL: -";
+
+        if (s.currentPing <= 25) {
+          curEl.style.color = "var(--success)";
+          badge.className = "badge-status status-ok";
+          badge.textContent = "Optimal";
+        } else if (s.currentPing <= 65) {
+          curEl.style.color = "var(--accent)";
+          badge.className = "badge-status status-ok";
+          badge.textContent = "Normal";
+        } else {
+          curEl.style.color = "var(--warning)";
+          badge.className = "badge-status status-warn";
+          badge.textContent = "Tinggi";
+        }
+      } else {
+        curEl.textContent = "RTO";
+        curEl.style.color = "var(--danger)";
+        badge.className = "badge-status status-err";
+        badge.textContent = "Timeout";
+      }
+
+      // Card 2: Dual Source Compare (Host vs MikroTik)
+      const hCur = s.hostCurrentPing !== null && s.hostCurrentPing !== undefined ? s.hostCurrentPing : "RTO";
+      const rCur = !isRouterPingEnabled ? "OFF" : (s.routerCurrentPing !== null && s.routerCurrentPing !== undefined ? s.routerCurrentPing : "RTO");
+      document.getElementById("dualCompareVal").textContent = `${hCur} / ${rCur}`;
+
+      if (!isRouterPingEnabled) {
+        document.getElementById("lanDeltaLabel").textContent = "MikroTik: Nonaktif";
+      } else if (typeof s.hostCurrentPing === "number" && typeof s.routerCurrentPing === "number") {
+        const delta = Math.round((s.hostCurrentPing - s.routerCurrentPing) * 10) / 10;
+        const deltaSign = delta > 0 ? `+${delta}` : `${delta}`;
+        const avgCompare = (s.hostAvg !== null && s.routerAvg !== null) ? ` (Avg: ${s.hostAvg} / ${s.routerAvg} ms)` : "";
+        document.getElementById("lanDeltaLabel").textContent = `${deltaSign} ms${avgCompare}`;
+      } else {
+        document.getElementById("lanDeltaLabel").textContent = "-- ms";
+      }
+
+      // Card 3: SLA & Packet Loss (Synchronized to Active View)
+      const slaEl = document.getElementById("slaUptimeNum");
+      slaEl.textContent = `${s.slaUptime}%`;
+      slaEl.style.color = s.slaUptime >= 99.5 ? "var(--success)" : (s.slaUptime >= 95 ? "var(--warning)" : "var(--danger)");
+      document.getElementById("slaLossDetail").textContent = `Loss: ${s.lossPct}% (${s.totalLost || 0})`;
+      const sentFormatted = Number(s.totalSent || 0).toLocaleString("id-ID");
+      document.getElementById("totalSamplesLabel").textContent = `${sentFormatted} sampel`;
+
+      // Card 4: Avg, Min & Jitter (Synchronized to Active View)
+      document.getElementById("avgPingNum").textContent = s.avgPing !== null ? s.avgPing : "--";
+      document.getElementById("minPingLabel").textContent = `Min: ${s.minPing !== null ? s.minPing : "--"} ms`;
+      document.getElementById("jitterLabel").textContent = `Jitter: ${s.jitter !== undefined ? s.jitter : 0} ms`;
+
+      // Card 5: Percentiles p95, p50, Max (Synchronized to Active View)
+      document.getElementById("p95Num").textContent = s.p95 !== null ? s.p95 : "--";
+      document.getElementById("p50Label").textContent = `p50: ${s.p50 !== null ? s.p50 : "--"} ms`;
+      document.getElementById("maxPingLabel").textContent = `Max: ${s.maxPing !== null ? s.maxPing : "--"} ms`;
+
+      // Render Integrated Chart Target Header
+      renderChartTargetHeader(data);
+      renderMultiPeriodTable(data.summary?.windows);
+      renderIncidents(data.incidents || []);
+      renderSampleTable(data);
+      updateChart(data);
+    }
+
+    function renderChartTargetHeader(data) {
+      const target = data.target || currentTarget;
+      const ip = data.resolvedIp || target;
+      const labelMap = {
+        "1.1.1.1": "Cloudflare DNS",
+        "8.8.8.8": "Google DNS",
+        "c.whatsapp.net": "WhatsApp Chat Server",
+        "mmg.whatsapp.net": "WhatsApp Media CDN",
+        "youtube.com": "YouTube CDN"
+      };
+      const desc = labelMap[target] || (data.isEphemeral ? "Target Kustom" : (data.label || "Target Kustom"));
+
+      const isIp = target === ip;
+      const domainEl = document.getElementById("chartTargetDomain");
+      if (domainEl) domainEl.textContent = target;
+
+      const ipEl = document.getElementById("chartTargetIp");
+      if (ipEl) ipEl.textContent = isIp ? `(${desc})` : `(IP: ${ip} &bull; ${desc})`;
+
+      const timeEl = document.getElementById("chartCaptureTime");
+      if (timeEl) timeEl.textContent = `Capture: ${formatIndoDateTime(new Date().toISOString())}`;
+
+      const rangeNames = {
+        "1h": `Live (${currentLiveZoom}s)`,
+        "12h": "Histori 12 Jam",
+        "24h": "Histori 24 Jam",
+        "7d": "Histori 7 Hari",
+        "30d": "Histori 30 Hari"
+      };
+      const titleEl = document.getElementById("chartTitleText");
+      if (titleEl) titleEl.textContent = rangeNames[currentRange] || currentRange;
+
+      document.title = `Ping SLA - ${target}`;
+    }
+
+    function toggleReportMode() {
+      const on = document.body.classList.toggle("report-mode");
+      const txt = document.getElementById("btnReportModeText");
+      if (txt) txt.textContent = on ? "Keluar Mode Laporan" : "Mode Laporan";
+      if (pingChart) setTimeout(() => pingChart.resize(), 50);
+    }
+
+    function renderMultiPeriodTable(windows) {
+      const tbody = document.getElementById("windowTableBody");
+      const badge = document.getElementById("windowSlaBadge");
+      if (!tbody) return;
+
+      if (!windows) {
+        tbody.innerHTML = `<tr><td colspan="${isRouterPingEnabled ? 9 : 8}" class="empty-state">Data multi-periode sedang dihimpun...</td></tr>`;
+        return;
+      }
+
+      // Determine which row matches the user's active view
+      let activeRowKey = "";
+      if (currentRange === "1h") {
+        if (currentLiveZoom <= 30) activeRowKey = "s30";
+        else if (currentLiveZoom <= 60) activeRowKey = "s30"; // closest
+        else if (currentLiveZoom <= 300) activeRowKey = "m5";
+        else if (currentLiveZoom <= 1800) activeRowKey = "m30";
+        else activeRowKey = "m60";
+      } else if (currentRange === "12h") {
+        activeRowKey = "h12";
+      } else if (currentRange === "24h") {
+        activeRowKey = "h24";
+      } else if (currentRange === "7d") {
+        activeRowKey = "d7";
+      } else if (currentRange === "30d") {
+        activeRowKey = "d30";
+      }
+
+      const rows = [
+        { key: "s30", name: "30 Detik Terakhir", desc: "Live Real-Time Zoom", data: windows.s30 },
+        { key: "m5",  name: "5 Menit Terakhir",  desc: "Tren Mikro Laten", data: windows.m5 },
+        { key: "m30", name: "30 Menit Terakhir", desc: "Performa Setengah Jam", data: windows.m30 },
+        { key: "m60", name: "60 Menit Terakhir", desc: "1 Jam Operasional", data: windows.m60 },
+        { key: "h12", name: "12 Jam Terakhir",   desc: "Separuh Hari Operasional", data: windows.h12 },
+        { key: "h24", name: "24 Jam Terakhir",   desc: "Histori Harian Penuh", data: windows.h24 },
+        { key: "d7",  name: "7 Hari Terakhir",   desc: "Akumulasi Mingguan", data: windows.d7 },
+        { key: "d30", name: "30 Hari Terakhir",  desc: "Histori Bulanan", data: windows.d30 },
+      ];
+
+      const allUptime = windows.s30?.slaUptime ?? 100;
+      if (badge) {
+        badge.textContent = `SLA ${allUptime}%`;
+        badge.className = allUptime >= 99.5 ? "badge-status status-ok" : (allUptime >= 95 ? "badge-status status-warn" : "badge-status status-err");
+      }
+
+      tbody.innerHTML = rows.map(r => {
+        const d = r.data || {};
+        const isActive = (r.key === activeRowKey);
+        const rowStyle = isActive ? `background: rgba(56, 189, 248, 0.08); font-weight: 500;` : ``;
+        const activePill = isActive ? `<span class="badge-status status-ok" style="font-size: 9px; padding: 1px 5px; margin-left: 6px;">Aktif</span>` : ``;
+
+        const hAvg = d.hostAvg !== null && d.hostAvg !== undefined
+          ? `<span style="color: #38bdf8; font-weight: 700;">${d.hostAvg} ms</span>`
+          : `--`;
+
+        const rAvgCell = isRouterPingEnabled
+          ? `<td style="text-align: right;">${d.routerAvg !== null && d.routerAvg !== undefined ? `<span style="color: #10b981; font-weight: 700;">${d.routerAvg} ms</span>` : `--`}</td>`
+          : ``;
+
+        const minMax = (d.minPing !== null && d.maxPing !== null)
+          ? `${d.minPing} / ${d.maxPing} ms`
+          : `--`;
+
+        const jitter = d.jitter !== undefined ? `${d.jitter} ms` : `0 ms`;
+        const samples = d.samples ? `${Number(d.samples).toLocaleString("id-ID")}x` : `0x`;
+
+        const lossPct = d.lossPct !== undefined ? d.lossPct : 0;
+        const lossBadge = lossPct > 0
+          ? `<span class="badge-status status-err">${lossPct}%</span>`
+          : `<span class="badge-status status-ok">0%</span>`;
+
+        const sla = d.slaUptime !== undefined ? `${d.slaUptime}%` : `100%`;
+        const slaColor = (d.slaUptime || 100) >= 99.5 ? "var(--success)" : ((d.slaUptime || 100) >= 95 ? "var(--warning)" : "var(--danger)");
+
+        let statusText = "Optimal";
+        let statusClass = "status-ok";
+        if (lossPct > 5 || (d.hostAvg && d.hostAvg > 70)) {
+          statusText = "Gangguan";
+          statusClass = "status-err";
+        } else if (lossPct > 0 || (d.hostAvg && d.hostAvg > 40)) {
+          statusText = "Waspada";
+          statusClass = "status-warn";
+        }
+
+        return `
+          <tr style="${rowStyle}">
+            <td>
+              <div style="display: flex; align-items: center;">
+                <span style="font-weight: 700; color: var(--text-bold);">${r.name}</span>
+                ${activePill}
+              </div>
+              <div style="font-size: 11px; color: var(--text-muted);">${r.desc}</div>
+            </td>
+            <td style="text-align: right;">${hAvg}</td>
+            ${rAvgCell}
+            <td style="text-align: right; color: var(--text-muted);">${minMax}</td>
+            <td style="text-align: right; color: var(--text-muted);">${jitter}</td>
+            <td style="text-align: right; color: var(--text-muted);">${samples}</td>
+            <td style="text-align: right;">${lossBadge}</td>
+            <td style="text-align: right; font-weight: 700; color: ${slaColor};">${sla}</td>
+            <td style="text-align: center;"><span class="badge-status ${statusClass}">${statusText}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function updateChart(data) {
+      if (!pingChart) return;
+      const hostSeries = data.hostSeries || [];
+      const routerSeries = data.routerSeries || [];
+      const len = Math.max(hostSeries.length, routerSeries.length);
+
+      const labels = [];
+      const hostData = [];
+      const routerData = [];
+
+      let maxVal = 25;
+      for (let i = 0; i < len; i++) {
+        const h = hostSeries[i];
+        const r = routerSeries[i];
+        labels.push(h?.label || r?.label || "");
+
+        const hVal = h && !h.unmonitored && h.avgPing !== null ? h.avgPing : null;
+        const rVal = r && !r.unmonitored && r.avgPing !== null ? r.avgPing : null;
+
+        hostData.push(hVal);
+        routerData.push(rVal);
+
+        if (hVal !== null && hVal > maxVal) maxVal = hVal;
+        if (rVal !== null && rVal > maxVal) maxVal = rVal;
+      }
+
+      // Live 1h: zero dots for clean 1-second curve; 12h/24h/7d/30d: smooth curve with minimal dots on high-res data
+      const nonNullCount = hostData.filter(v => v !== null).length;
+      let ptRadius = 0;
+      let lineTension = 0.05;
+      if (nonNullCount === 1) {
+        ptRadius = 4;
+      } else if (currentRange === "7d" || currentRange === "30d") {
+        // Hourly resolution (168/720 points): smooth curve, no individual dots
+        ptRadius = 0;
+        lineTension = 0.2;
+      } else if (currentRange === "12h" || currentRange === "24h") {
+        // 5-min resolution (144/288 points): smooth curve, no individual dots
+        ptRadius = 0;
+        lineTension = 0.15;
+      } else {
+        ptRadius = 0;
+        lineTension = 0.12;
+      }
+
+      pingChart.data.labels = labels;
+      pingChart.data.datasets[0].data = hostData;
+      pingChart.data.datasets[0].hidden = (currentSource === "router");
+      pingChart.data.datasets[0].pointRadius = ptRadius;
+      pingChart.data.datasets[0].tension = lineTension;
+      pingChart.data.datasets[0].spanGaps = false;
+
+      pingChart.data.datasets[1].data = isRouterPingEnabled ? routerData : [];
+      pingChart.data.datasets[1].hidden = !isRouterPingEnabled || (currentSource === "host");
+      pingChart.data.datasets[1].pointRadius = ptRadius;
+      pingChart.data.datasets[1].tension = lineTension;
+      pingChart.data.datasets[1].spanGaps = false;
+
+      pingChart.options.scales.y.suggestedMax = Math.ceil((maxVal * 1.25) / 5) * 5;
+
+      // Dynamic X-axis tick density based on range resolution
+      const tickLimits = { "1h": 8, "12h": 12, "24h": 16, "7d": 14, "30d": 16 };
+      pingChart.options.scales.x.ticks.maxTicksLimit = tickLimits[currentRange] || 12;
+
+      pingChart.update("none");
+    }
+
+    function renderIncidents(incidents) {
+      const container = document.getElementById("incidentsContainer");
+      const badge = document.getElementById("incidentCountBadge");
+      const filtered = (incidents || []).filter(inc => isRouterPingEnabled || inc.source !== "router");
+      badge.textContent = `${filtered.length} Insiden`;
+      badge.className = filtered.length > 0 ? "badge-status status-err" : "badge-status status-ok";
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="empty-state">Tidak ada insiden packet loss atau RTO tercatat.</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(inc => {
+        const timeStr = inc.startTime ? new Date(inc.startTime).toLocaleTimeString("id-ID") : "-";
+        const srcName = inc.source === "router" ? "MikroTik WAN (Uplink ISP)" : "Host LAN";
+        const dur = inc.durationSeconds ? `${inc.durationSeconds}s` : "Aktif";
+        const isLocalMaint = String(inc.reason || "").includes("MAINTENANCE LOKAL") || String(inc.reason || "").includes("JARINGAN LOKAL") || String(inc.reason || "").includes("Daemon Offline") || String(inc.reason || "").includes("Server Dimatikan");
+        const titleColor = isLocalMaint ? "var(--warning)" : "var(--danger)";
+        const badgeClass = isLocalMaint ? "status-warn" : "status-err";
+        return `
+          <div class="incident-item">
+            <div>
+              <div style="font-weight: 700; color: ${titleColor};">${inc.reason}</div>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: 'JetBrains Mono', monospace;">
+                Sumber: ${srcName} &bull; Pukul: ${timeStr}
+              </div>
+            </div>
+            <span class="badge-status ${badgeClass}">${dur}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderSampleTable(data) {
+      const tbody = document.getElementById("dataTableBody");
+      const hostSeries = data.hostSeries || [];
+      const routerSeries = data.routerSeries || [];
+      const len = Math.max(hostSeries.length, routerSeries.length);
+
+      // Filter only monitored/recorded rows for the table so we never show fake rows
+      const recordedIndices = [];
+      for (let i = 0; i < len; i++) {
+        const h = hostSeries[i];
+        const r = routerSeries[i];
+        if (h && !h.unmonitored && h.samples > 0) {
+          recordedIndices.push(i);
+        } else if (isRouterPingEnabled && r && !r.unmonitored && r.samples > 0) {
+          recordedIndices.push(i);
+        }
+      }
+
+      document.getElementById("sampleCountBadge").textContent = `${recordedIndices.length} titik valid`;
+
+      if (recordedIndices.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${isRouterPingEnabled ? 6 : 4}" class="empty-state">Belum ada sampel terekam pada periode ini.</td></tr>`;
+        return;
+      }
+
+      const recentIndices = recordedIndices.slice(-40).reverse();
+      tbody.innerHTML = recentIndices.map(i => {
+        const hPt = hostSeries[i];
+        const rPt = routerSeries[i];
+        const label = hPt?.label || rPt?.label || "-";
+
+        const hVal = hPt && hPt.avgPing !== null
+          ? `<span style="color: #38bdf8; font-weight: 700;">${hPt.avgPing} ms</span>`
+          : `<span style="color: var(--danger); font-weight: 700;">RTO</span>`;
+
+        let routerCols = "";
+        if (isRouterPingEnabled) {
+          const rVal = rPt && rPt.avgPing !== null
+            ? `<span style="color: #10b981; font-weight: 700;">${rPt.avgPing} ms</span>`
+            : `<span style="color: var(--danger); font-weight: 700;">RTO</span>`;
+
+          let diff = "-";
+          if (hPt && rPt && hPt.avgPing !== null && rPt.avgPing !== null) {
+            const delta = Math.round((hPt.avgPing - rPt.avgPing) * 10) / 10;
+            diff = delta > 0 ? `+${delta} ms` : `${delta} ms`;
+          }
+
+          routerCols = `
+            <td style="text-align: right;">${rVal}</td>
+            <td style="text-align: right; color: var(--text-muted);">${diff}</td>
+          `;
+        }
+
+        const samples = isRouterPingEnabled
+          ? Math.max(hPt?.samples || 0, rPt?.samples || 0)
+          : (hPt?.samples || 0);
+
+        const loss = isRouterPingEnabled
+          ? Math.max(hPt?.lossPct || 0, rPt?.lossPct || 0)
+          : (hPt?.lossPct || 0);
+
+        const lossBadge = loss > 0
+          ? `<span class="badge-status status-err">${loss}%</span>`
+          : `<span class="badge-status status-ok">0%</span>`;
+
+        return `
+          <tr>
+            <td style="color: var(--text-bold); font-weight: 600;">${label}</td>
+            <td style="text-align: right;">${hVal}</td>
+            ${routerCols}
+            <td style="text-align: right; color: var(--text-muted);">${samples}x</td>
+            <td style="text-align: right;">${lossBadge}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    const RESOLUTION_CONFIG = {
+      "30s": { range: "1h", zoom: 30, title: "Live (Resolusi 30 Detik)" },
+      "1m": { range: "1h", zoom: 60, title: "Live (Resolusi 1 Menit)" },
+      "5m": { range: "1h", zoom: 300, title: "Live (Resolusi 5 Menit)" },
+      "30m": { range: "1h", zoom: 1800, title: "Live (Resolusi 30 Menit)" },
+      "1h": { range: "1h", zoom: 3600, title: "Live (Resolusi 1 Jam)" },
+      "12h": { range: "12h", zoom: 0, title: "Histori 12 Jam (Resolusi 5 Menit)" },
+      "24h": { range: "24h", zoom: 0, title: "Histori 24 Jam (Resolusi 5 Menit)" },
+      "7d": { range: "7d", zoom: 0, title: "Histori 7 Hari (Resolusi 1 Jam)" },
+      "30d": { range: "30d", zoom: 0, title: "Histori 30 Hari (Resolusi 1 Jam)" }
+    };
+
+    let currentResolution = "5m";
+
+    function selectResolution(key) {
+      const conf = RESOLUTION_CONFIG[key];
+      if (!conf) return;
+
+      const isEphem = isEphemeralTarget(currentTarget);
+      if (isEphem && conf.range !== "1h") {
+        showToast("Target sesi kustom hanya mendukung pemantauan Live.", "info");
+        return;
+      }
+
+      currentResolution = key;
+      currentRange = conf.range;
+      if (conf.zoom > 0) {
+        currentLiveZoom = conf.zoom;
+      }
+
+      const titleEl = document.getElementById("chartTitleText");
+      if (titleEl) titleEl.textContent = conf.title;
+
+      updateResolutionUI();
+      resetPollingTimer();
+      fetchTelemetry();
+    }
+
+    function updateResolutionUI() {
+      const keys = ["30s", "1m", "5m", "30m", "1h", "12h", "24h", "7d", "30d"];
+      const isEphem = isEphemeralTarget(currentTarget);
+
+      keys.forEach(k => {
+        const btn = document.getElementById(`resBtn_${k}`);
+        if (btn) {
+          if (k === currentResolution) {
+            btn.classList.add("active");
+          } else {
+            btn.classList.remove("active");
+          }
+
+          const conf = RESOLUTION_CONFIG[k];
+          if (isEphem && conf && conf.range !== "1h") {
+            btn.disabled = true;
+            btn.style.opacity = "0.4";
+            btn.style.cursor = "not-allowed";
+            btn.title = "Target kustom hanya mendukung pemantauan Live";
+          } else {
+            btn.disabled = false;
+            btn.style.opacity = "";
+            btn.style.cursor = "pointer";
+            btn.title = conf ? conf.title : "";
+          }
+        }
+      });
+    }
+
+    function switchTarget(host) {
+      currentTarget = host;
+      renderTargetTabs();
+
+      const isEphem = isEphemeralTarget(host);
+      if (isEphem && RESOLUTION_CONFIG[currentResolution]?.range !== "1h") {
+        currentResolution = "30s";
+        currentRange = "1h";
+        currentLiveZoom = 30;
+      }
+
+      const titleEl = document.getElementById("chartTitleText");
+      if (titleEl) {
+        titleEl.textContent = RESOLUTION_CONFIG[currentResolution]?.title || "Live (Resolusi 30 Detik)";
+      }
+
+      updateResolutionUI();
+      resetPollingTimer();
+      fetchTelemetry();
+    }
+
+    function switchRange(range) {
+      if (range === "1h") selectResolution("30s");
+      else if (range === "12h") selectResolution("12h");
+      else if (range === "24h") selectResolution("24h");
+      else if (range === "7d") selectResolution("7d");
+      else if (range === "30d") selectResolution("30d");
+    }
+
+    function setLiveZoom(sec) {
+      if (sec === 30) selectResolution("30s");
+      else if (sec === 60) selectResolution("1m");
+      else if (sec === 300) selectResolution("5m");
+      else if (sec === 1800) selectResolution("30m");
+      else if (sec === 3600) selectResolution("1h");
+    }
+
+    function updateRangeUI() {
+      updateResolutionUI();
+    }
+
+    function updateZoomUI() {
+      updateResolutionUI();
+    }
+
+    function updateTimeframeSelectUI() {
+      updateResolutionUI();
+    }
+
+    function resetPollingTimer() {
+      if (pollInterval) clearInterval(pollInterval);
+      const statusTxt = document.getElementById("liveStatusText");
+      if (currentRange === "1h" || isEphemeralTarget(currentTarget)) {
+        pollInterval = setInterval(fetchTelemetry, 1000);
+        if (statusTxt) statusTxt.textContent = "LIVE SYNC (1S)";
+      } else {
+        pollInterval = setInterval(fetchTelemetry, 5000);
+        if (statusTxt) statusTxt.textContent = `HISTORI (${currentRange.toUpperCase()})`;
+      }
+    }
+
+    function onSourceChange() {
+      currentSource = document.getElementById("sourceSelect").value;
+      const legHost = document.getElementById("legendHost");
+      const legRouter = document.getElementById("legendRouter");
+
+      if (currentSource === "host") {
+        legHost.style.display = "inline-flex";
+        legRouter.style.display = "none";
+      } else if (currentSource === "router") {
+        legHost.style.display = "none";
+        legRouter.style.display = "inline-flex";
+      } else {
+        legHost.style.display = "inline-flex";
+        legRouter.style.display = "inline-flex";
+      }
+
+      fetchTelemetry();
+    }
+
+    function exportDataCsv() {
+      if (!latestTelemetryData) return;
+      const hList = latestTelemetryData.hostSeries || [];
+      const rList = latestTelemetryData.routerSeries || [];
+      const len = Math.max(hList.length, rList.length);
+
+      let csv = isRouterPingEnabled
+        ? "Timestamp,Periode,Host_Latency_ms,MikroTik_Latency_ms,Samples,PacketLoss_Pct\n"
+        : "Timestamp,Periode,Host_Latency_ms,Samples,PacketLoss_Pct\n";
+
+      for (let i = 0; i < len; i++) {
+        const h = hList[i];
+        const r = rList[i];
+        if (h && h.unmonitored && (!isRouterPingEnabled || (r && r.unmonitored))) continue;
+        const time = h?.timestamp || r?.timestamp || "";
+        const label = h?.label || r?.label || "";
+        const hVal = h && h.avgPing !== null ? h.avgPing : "RTO";
+        const samples = isRouterPingEnabled ? Math.max(h?.samples || 0, r?.samples || 0) : (h?.samples || 0);
+        const loss = isRouterPingEnabled ? Math.max(h?.lossPct || 0, r?.lossPct || 0) : (h?.lossPct || 0);
+
+        if (isRouterPingEnabled) {
+          const rVal = r && r.avgPing !== null ? r.avgPing : "RTO";
+          csv += `"${time}","${label}",${hVal},${rVal},${samples},${loss}\n`;
+        } else {
+          csv += `"${time}","${label}",${hVal},${samples},${loss}\n`;
+        }
+      }
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ping_telemetry_${currentTarget}_${currentRange}_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    async function confirmResetHistory() {
+      if (!confirm("PERINGATAN:\nApakah Anda yakin ingin mereset seluruh histori ping, ringkasan agregasi, dan log incident?\n\nSemua data lokal akan dikosongkan dan pemantauan dimulai ulang dari 0.")) {
+        return;
+      }
+      try {
+        const res = await fetch("/api/ping/reset-history", { method: "POST" });
+        const data = await res.json();
+        if (data && (data.success || data.ok)) {
+          alert("Histori ping berhasil dikosongkan.");
+          fetchTelemetry();
+        } else {
+          alert("Gagal mereset histori: " + (data ? data.message : "Kesalahan server"));
+        }
+      } catch (e) {
+        alert("Gagal menghubungi server: " + e.message);
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      syncThemeIcons();
+      initChart();
+      syncRouterConfig();
+      switchTarget(PERMANENT_TARGETS[0] || "1.1.1.1");
+      selectResolution("5m");
+    });
+  </script>
+</body>
+</html>

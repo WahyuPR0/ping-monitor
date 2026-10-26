@@ -1,0 +1,44 @@
+{
+  "name": "ping-monitor",
+  "version": "1.1.0",
+  "description": "High-Precision Real-Time Network Telemetry & Ping Monitor Dashboard with MikroTik Dual-Source Toggle",
+  "main": "build/index.js",
+  "type": "module",
+  "keywords": [
+    "network-monitor",
+    "ping-monitor",
+    "telemetry",
+    "sla-monitoring",
+    "mikrotik",
+    "packet-loss",
+    "latency-monitor",
+    "real-time-dashboard"
+  ],
+  "author": "Wahyu (WahyuPR0)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WahyuPR0/ping-monitor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WahyuPR0/ping-monitor/issues"
+  },
+  "homepage": "https://github.com/WahyuPR0/ping-monitor#readme",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "routeros-client": "^1.1.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Production build
+build/
+
+# Local Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+
+# Live Telemetry Historical Database (SSD persistence)
+ping_history.json
+ping_history.json.tmp
+ping_history.backup.json
+backups/
+*.backup
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System & OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor & IDE Directories
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
