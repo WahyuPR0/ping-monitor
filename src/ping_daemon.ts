@@ -386,7 +386,7 @@ export class PingDaemon {
     if (isIpv4) return targetHost;
 
     const nowMs = Date.now();
-    const cached = this.dnsCache.get(targetHost);
+    const cached = this.dnsCache.get(host) || this.dnsCache.get(targetHost);
     if (cached && nowMs < cached.expiresAt) {
       return cached.ip;
     }
@@ -395,6 +395,7 @@ export class PingDaemon {
       const addresses = await publicResolver.resolve4(targetHost);
       if (addresses && addresses.length > 0) {
         const ip = addresses[0];
+        this.dnsCache.set(host, { ip, expiresAt: nowMs + 120000 });
         this.dnsCache.set(targetHost, { ip, expiresAt: nowMs + 120000 });
         return ip;
       }
@@ -403,6 +404,7 @@ export class PingDaemon {
     try {
       const lookupRes = await dnsLookup(targetHost, { family: 4 });
       if (lookupRes?.address) {
+        this.dnsCache.set(host, { ip: lookupRes.address, expiresAt: nowMs + 120000 });
         this.dnsCache.set(targetHost, { ip: lookupRes.address, expiresAt: nowMs + 120000 });
         return lookupRes.address;
       }
