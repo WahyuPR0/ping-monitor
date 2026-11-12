@@ -254,11 +254,13 @@ export class PingDaemon {
     for (const item of items) {
       if (item.includes(":")) {
         const parts = item.split(":");
-        const host = parts[0].trim().toLowerCase();
+        let host = parts[0].trim().toLowerCase();
+        if (host === "instagram") host = "instagram.com";
         const label = parts.slice(1).join(":").trim() || host;
         if (host) result.push({ host, label });
       } else {
-        const host = item.trim().toLowerCase();
+        let host = item.trim().toLowerCase();
+        if (host === "instagram") host = "instagram.com";
         if (host) result.push({ host, label: host });
       }
     }
@@ -274,6 +276,11 @@ export class PingDaemon {
 
   public getConfiguredTargets(): { host: string; label: string }[] {
     return this.parseConfiguredTargets();
+  }
+
+  public getDefaultTarget(): string {
+    const first = this.targets.keys().next().value;
+    return first || "1.1.1.1";
   }
 
   private initTargets() {
@@ -326,11 +333,16 @@ export class PingDaemon {
     console.log("[Ping Daemon] Real-time dual-source telemetry daemon started (100% genuine data, SSD-safe 5m flush).");
 
     const triggerStaggeredProbes = () => {
-      this.probeTarget("1.1.1.1").catch(() => {});
-      setTimeout(() => this.probeTarget("8.8.8.8").catch(() => {}), 180);
-      setTimeout(() => this.probeTarget("c.whatsapp.net").catch(() => {}), 360);
-      setTimeout(() => this.probeTarget("mmg.whatsapp.net").catch(() => {}), 540);
-      setTimeout(() => this.probeTarget("youtube.com").catch(() => {}), 720);
+      const hosts = Array.from(this.targets.keys());
+      if (hosts.length === 0) return;
+      const step = Math.max(30, Math.floor(900 / hosts.length));
+      hosts.forEach((host, idx) => {
+        if (idx === 0) {
+          this.probeTarget(host).catch(() => {});
+        } else {
+          setTimeout(() => this.probeTarget(host).catch(() => {}), idx * step);
+        }
+      });
     };
 
     // Immediate initial probe
@@ -363,33 +375,40 @@ export class PingDaemon {
    * (prevents CDN Anycast / Multi-IP split where Host hits Singapore 31ms and MikroTik hits Jakarta 14ms).
    */
   private async resolveTargetIp(host: string): Promise<string> {
-    const isIpv4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(host);
-    if (isIpv4) return host;
+    let targetHost = host;
+    // Canonical Geo-CDN alias for Meta / Instagram:
+    // Apex domain instagram.com drops ICMP & blackholes Anycast, whereas www.instagram.com targets local CDN edge
+    if (targetHost === "instagram.com" || targetHost === "instagram") {
+      targetHost = "www.instagram.com";
+    }
+
+    const isIpv4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(targetHost);
+    if (isIpv4) return targetHost;
 
     const nowMs = Date.now();
-    const cached = this.dnsCache.get(host);
+    const cached = this.dnsCache.get(targetHost);
     if (cached && nowMs < cached.expiresAt) {
       return cached.ip;
     }
 
     try {
-      const addresses = await publicResolver.resolve4(host);
+      const addresses = await publicResolver.resolve4(targetHost);
       if (addresses && addresses.length > 0) {
         const ip = addresses[0];
-        this.dnsCache.set(host, { ip, expiresAt: nowMs + 120000 });
+        this.dnsCache.set(targetHost, { ip, expiresAt: nowMs + 120000 });
         return ip;
       }
     } catch {}
 
     try {
-      const lookupRes = await dnsLookup(host, { family: 4 });
+      const lookupRes = await dnsLookup(targetHost, { family: 4 });
       if (lookupRes?.address) {
-        this.dnsCache.set(host, { ip: lookupRes.address, expiresAt: nowMs + 120000 });
+        this.dnsCache.set(targetHost, { ip: lookupRes.address, expiresAt: nowMs + 120000 });
         return lookupRes.address;
       }
     } catch {}
 
-    return cached?.ip || host;
+    return cached?.ip || targetHost;
   }
 
   /**
@@ -691,6 +710,9 @@ export class PingDaemon {
   public async probeCustomOnce(rawInput: string) {
     let clean = String(rawInput || "").trim().toLowerCase();
     clean = clean.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].trim();
+    if (clean === "instagram" || clean === "instagram.com") {
+      clean = "www.instagram.com";
+    }
 
     if (!clean || clean.length > 253 || !/^[a-z0-9.-]+$/.test(clean) || clean.startsWith("-") || clean.endsWith("-")) {
       throw new Error("Format domain atau alamat IP tidak valid.");
@@ -837,7 +859,8 @@ export class PingDaemon {
   }
 
   public getTelemetry(targetHost: string, range: "1h" | "12h" | "24h" | "7d" | "30d", source: "host" | "router" | "both", zoom: number = 0) {
-    const target = this.targets.get(targetHost) || this.targets.get("1.1.1.1")!;
+    const target = this.targets.get(targetHost) || this.targets.get(this.getDefaultTarget());
+    if (!target) return null;
     const now = new Date();
 
     let hostSeries: RollupPoint[] = [];

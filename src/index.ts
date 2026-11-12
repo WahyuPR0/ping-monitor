@@ -209,7 +209,7 @@ export class PingMonitorServer {
     this.app.get("/api/ping/telemetry", (req, res) => {
       res.set("Access-Control-Allow-Origin", "*");
       res.set("Cache-Control", "no-store");
-      const target = String(req.query.target || "1.1.1.1").trim();
+      const target = String(req.query.target || "").trim() || this.pingDaemon.getDefaultTarget();
       const range = (String(req.query.range || "1h").toLowerCase() as "1h" | "12h" | "24h" | "7d" | "30d");
       const source = (String(req.query.source || "both").toLowerCase() as "host" | "router" | "both");
       const zoom = parseInt(String(req.query.zoom || "0"), 10) || 0;
@@ -218,6 +218,9 @@ export class PingMonitorServer {
       const selectedRange = validRanges.includes(range) ? range : "1h";
 
       const telemetry = this.pingDaemon.getTelemetry(target, selectedRange, source, zoom);
+      if (!telemetry) {
+        return res.status(404).json({ error: `Target "${target}" tidak ditemukan.` });
+      }
       res.json(telemetry);
     });
 

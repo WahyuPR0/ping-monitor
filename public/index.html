@@ -1332,23 +1332,7 @@
               </svg>
               Target:
             </span>
-            <div id="permanentTabsContainer" style="display:inline-flex; gap:6px; flex-wrap:wrap;">
-              <button type="button" id="targetBtn_1.1.1.1" class="tab-btn active" onclick="switchTarget('1.1.1.1')">
-                1.1.1.1 (Cloudflare)
-              </button>
-              <button type="button" id="targetBtn_8.8.8.8" class="tab-btn" onclick="switchTarget('8.8.8.8')">
-                8.8.8.8 (Google)
-              </button>
-              <button type="button" id="targetBtn_c.whatsapp.net" class="tab-btn" onclick="switchTarget('c.whatsapp.net')">
-                WhatsApp Chat
-              </button>
-              <button type="button" id="targetBtn_mmg.whatsapp.net" class="tab-btn" onclick="switchTarget('mmg.whatsapp.net')">
-                WhatsApp Media CDN
-              </button>
-              <button type="button" id="targetBtn_youtube.com" class="tab-btn" onclick="switchTarget('youtube.com')">
-                YouTube
-              </button>
-            </div>
+            <div id="permanentTabsContainer" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
             <div id="ephemeralTabsContainer" style="display:inline-flex; gap:6px; flex-wrap:wrap;"></div>
           </div>
 
@@ -1574,8 +1558,8 @@
 
   <script>
     // State Management
-    const PERMANENT_TARGETS = ["1.1.1.1", "8.8.8.8", "c.whatsapp.net", "mmg.whatsapp.net", "youtube.com"];
-    let currentTarget = "1.1.1.1";
+    let PERMANENT_TARGETS = [];
+    let currentTarget = "";
     let currentRange = "1h";
     let currentLiveZoom = 30; // Default live zoom 30 detik for clean separated time view
     let currentSource = "both";
@@ -1765,13 +1749,7 @@
     }
 
     let isRouterPingEnabled = false;
-    let CONFIGURED_TARGETS = [
-      { host: "1.1.1.1", label: "1.1.1.1 (Cloudflare)" },
-      { host: "8.8.8.8", label: "8.8.8.8 (Google)" },
-      { host: "c.whatsapp.net", label: "WhatsApp Chat" },
-      { host: "mmg.whatsapp.net", label: "WhatsApp Media CDN" },
-      { host: "youtube.com", label: "YouTube" }
-    ];
+    let CONFIGURED_TARGETS = [];
 
     function showToast(message, type = "info") {
       let container = document.getElementById("toastContainer");
@@ -2560,7 +2538,7 @@
         "mmg.whatsapp.net": "WhatsApp Media CDN",
         "youtube.com": "YouTube CDN"
       };
-      const desc = labelMap[target] || (data.isEphemeral ? "Target Kustom" : (data.label || "Target Kustom"));
+      const desc = data.label || labelMap[target] || (data.isEphemeral ? "Target Kustom" : target);
 
       const isIp = target === ip;
       const domainEl = document.getElementById("chartTargetDomain");
@@ -3079,12 +3057,11 @@
       }
     }
 
-    window.addEventListener("DOMContentLoaded", () => {
+    window.addEventListener("DOMContentLoaded", async () => {
       syncThemeIcons();
       initChart();
-      syncRouterConfig();
-      switchTarget(PERMANENT_TARGETS[0] || "1.1.1.1");
       selectResolution("5m");
+      await syncRouterConfig();
     });
   </script>
 </body>
